@@ -4,12 +4,42 @@
 	import type { GameController } from './types';
 	import GameKeyboard from './GameKeyboard.svelte';
 
-	export let gameState:("idle"|"playing"|"paused"|"win") = "idle";
+	export let gameState: 'idle' | 'playing' | 'paused' | 'win' = 'idle';
 
+	const GAME_DIFFICULTIES:{[key:string]:{ label:string, showPercent: number }} = {
+		"easy": {
+			label: 'Easy',
+			showPercent: 0.5
+		},
+		"medium": {
+			label: 'Medium',
+			showPercent: 0.25
+		},
+		"hard": {
+			label: 'Hard',
+			showPercent: 0.1
+		},
+		"extreme": {
+			label: 'Extreme (No Hint)',
+			showPercent: 0
+		}
+	};
+
+	let selectedDifficulties: string;
 	let breedImages: string[] = [];
 	let currentBreedName: string = '';
 	let currentBreedNameArray: any[] = [];
 	let enteredChars = '';
+	
+	let visibleIndexes: number[] = [];
+
+	function prepareDifficulties() {
+		visibleIndexes = [];
+		const difficulties = GAME_DIFFICULTIES[selectedDifficulties];
+		const n = Math.floor(currentBreedName.length * difficulties.showPercent);
+		const rand = crypto.getRandomValues(new Uint8Array(n))
+		visibleIndexes = Array.from(rand.map(byte => Math.floor((byte / 255) * n)));
+	}
 
 	function processBreedName() {
 		currentBreedNameArray = currentBreedName.split('').map((c) => ({
@@ -43,7 +73,8 @@
 				breedImages = message;
 				currentBreedName = breedName + (subBreedName ? ' ' + subBreedName : '');
 				processBreedName();
-                gameState = "playing";
+				prepareDifficulties();
+				gameState = 'playing';
 			})
 			.catch((error) => {
 				alert('Unable to start game! ' + error.message);
@@ -108,28 +139,34 @@
 	}
 
 	function handleKeyboardKeyPress(e: CustomEvent) {
-		if (gameState != "playing") return;
+		if (gameState != 'playing') return;
 		const { char } = e.detail;
 		appendChar(char);
 	}
 
 	function handleKeyboardDelete() {
-		if (gameState != "playing") return;
+		if (gameState != 'playing') return;
 		backspaceChar();
 	}
 
 	function handleKeyboardSubmit() {
-		if (gameState != "playing") return;
+		if (gameState != 'playing') return;
 		checkGame();
 	}
 
 	function handleKeyboardClear() {
-		if (gameState != "playing") return;
+		if (gameState != 'playing') return;
 		handleReset();
 	}
 
 	export const gameController: GameController = {
 		start() {
+			enteredChars = "";
+			breedImages = [];
+			currentBreedName = "";
+			currentBreedNameArray = [];
+			visibleIndexes = [];
+			
 			loadBreedInfo();
 		},
 		pause() {},
@@ -144,7 +181,7 @@
 </script>
 
 <div class="guess-the-doggo-container">
-	{#if gameState == "playing"}
+	{#if gameState == 'playing'}
 		<div class="dog-pics">
 			{#each breedImages as img, i (i)}
 				<img src={img} alt="Dog image number {i + 1}" class="dog-pic" />
@@ -157,8 +194,9 @@
 					class:green={item.state == 2}
 					class:orange={item.state == 1}
 					class:red={item.state == 0}
+					class:space={item.char == ' '}
 				>
-					{item.visible ? item.char : ''}
+					{(item.visible || visibleIndexes.includes(i)) ? item.char : ''}
 				</div>
 			{/each}
 		</div>
@@ -177,9 +215,20 @@
 		>
 			Check
 		</button>
-	{:else if gameState == "idle"}
+	{:else if gameState == 'idle'}
 		<div class="greet-screen p-4">
 			<h3 class="text-3xl text-center mt-16 uppercase greet-h3">Guess The Doggo</h3>
+
+			<div class="game-difficulties">
+				<label>Select difficulties:</label>
+				<select bind:value={selectedDifficulties}>
+					{#each Object.keys(GAME_DIFFICULTIES) as key (key)}
+						{@const obj = GAME_DIFFICULTIES[key]}
+						<option value={key}>{obj.label}</option>
+					{/each}
+				</select>
+			</div>
+
 			<button
 				class="start-btn bg-green-600 text-white border-green-700 rounded-lg"
 				on:click={() => gameController.start()}
@@ -244,6 +293,10 @@
 					background-color: rgb(0, 220, 0);
 					border-color: rgb(0, 170, 0);
 				}
+
+				&.space {
+					opacity: 0;
+				}
 			}
 		}
 
@@ -263,6 +316,31 @@
 
 			.greet-h3 {
 				letter-spacing: 2px;
+			}
+
+			.game-difficulties {
+				display: flex;
+				flex-direction: column;
+				margin-top: 1rem;
+				font-size: 1.25rem;
+
+				label {
+					margin-bottom: 0.5rem;
+				}
+
+				select {
+					padding: 1rem 1.25rem;
+					appearance: none;
+					background-color: white;
+					border: 1px solid #ccc;
+					border-radius: 0.5rem;
+					cursor: pointer;
+					position: relative;
+					background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABmklEQVRoQ+1YsUoDURDMCRrrpBau8As0SCzTaGNnYaGFlv6CpPUXxCqpFKzExtJCsNPGWitLG6sUCaKzcAdR8s57O+/lPNjAkCPZndmdeeFBkkbNX0nN52/YAlUnaAlYAqQDdoRIA+l2S4C2kCSwBEgD6XZLgLaQJLAESAPpdkuAtpAk0CSwBM0rYIXU/t3+hg/2gLEPr2YB4d8A7oGmj1hB7QTf9YAHXz7tAqJzDJz5Cjrqhetcw8UsIHoD4EgjPNVzgecDLQe7wHIW+5pygGf0bQIjZX+QfyVSiD8Cbc8hPlDfAV49+36UswnkZDt4uAEWSg7zhbpd4LpkvbMs1AIicAqclBxIavslawvLQi4g7t8C238Mdofvt4DP/7aAzNMCnoDUMZxcVuvAe4jhhSNkAvlMrktOfVkVLRtjAdGbdcmpL6sqFhDNIXCYiV/ifT/UsZnmiZWAaOSX3CKeu4D6sqoqAdFdzcRfYrgf60cca9aZvDGP0FwWsQXmYnOBiCVgCZAO2BEiDaTbLQHaQpLAEiANpNtrn8A3G08lMSId4a0AAAAASUVORK5CYII=');
+					background-size: 32px 32px;
+					background-repeat: no-repeat;
+					background-position: 98.5% center;
+				}
 			}
 
 			.start-btn {

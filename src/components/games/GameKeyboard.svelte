@@ -84,7 +84,7 @@
 
         .key {
             flex: 1;
-            padding: 0.5rem;
+            padding: 1.125rem;
             border: 1px solid darkblue;
             background-color: lightblue;
         }
