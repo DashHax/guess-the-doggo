@@ -4,7 +4,7 @@
 	import type { GameController } from './types';
 	import GameKeyboard from './GameKeyboard.svelte';
 
-	export let started: boolean = false;
+	export let gameState:("idle"|"playing"|"paused"|"win") = "idle";
 
 	let breedImages: string[] = [];
 	let currentBreedName: string = '';
@@ -43,7 +43,7 @@
 				breedImages = message;
 				currentBreedName = breedName + (subBreedName ? ' ' + subBreedName : '');
 				processBreedName();
-				started = true;
+                gameState = "playing";
 			})
 			.catch((error) => {
 				alert('Unable to start game! ' + error.message);
@@ -108,23 +108,23 @@
 	}
 
 	function handleKeyboardKeyPress(e: CustomEvent) {
-		if (!started) return;
+		if (gameState != "playing") return;
 		const { char } = e.detail;
 		appendChar(char);
 	}
 
 	function handleKeyboardDelete() {
-		if (!started) return;
+		if (gameState != "playing") return;
 		backspaceChar();
 	}
 
 	function handleKeyboardSubmit() {
-		if (!started) return;
+		if (gameState != "playing") return;
 		checkGame();
 	}
 
 	function handleKeyboardClear() {
-		if (!started) return;
+		if (gameState != "playing") return;
 		handleReset();
 	}
 
@@ -136,7 +136,6 @@
 		end(win: boolean) {
 			if (win) {
 				alert("You're correct!");
-				started = false;
 			} else {
 				alert('Try again...');
 			}
@@ -145,7 +144,7 @@
 </script>
 
 <div class="guess-the-doggo-container">
-	{#if started}
+	{#if gameState == "playing"}
 		<div class="dog-pics">
 			{#each breedImages as img, i (i)}
 				<img src={img} alt="Dog image number {i + 1}" class="dog-pic" />
@@ -178,7 +177,7 @@
 		>
 			Check
 		</button>
-	{:else}
+	{:else if gameState == "idle"}
 		<div class="greet-screen p-4">
 			<h3 class="text-3xl text-center mt-16 uppercase greet-h3">Guess The Doggo</h3>
 			<button

@@ -8,14 +8,14 @@
         goto("/", { invalidateAll: true, replaceState: true });
     } 
 
-    let isGameStarted = false;
+    let gameState:("idle"|"playing"|"paused"|"win");
     let controller:GameController;
 
 </script>
 
 <div class="game-container">
     <div class="game">
-        <MainGame bind:started={isGameStarted} bind:gameController={controller}/>
+        <MainGame bind:gameState={gameState} bind:gameController={controller}/>
     </div>
 </div>
 
