@@ -75,25 +75,28 @@
 			currentBreedName.toLowerCase() == enteredChars.toLowerCase()
 		);
 
-		if (enteredChars.length != currentBreedName.length) {
-			gameController.end(false);
-			return;
-		}
-
 		let chancesChars = currentBreedName.toLowerCase().split('');
 		currentBreedNameArray = currentBreedNameArray.map((item, i) => {
-			const cInput = enteredChars[i].toLowerCase();
-			if (item.char.toLowerCase() == cInput) {
-				item.visible = true;
-				item.state = 2;
-				totalCorrect++;
-			} else {
-				if (chancesChars.indexOf(cInput) > -1) {
-					item.state = 1;
-					chancesChars.splice(chancesChars.indexOf(cInput), 1);
+			item.visible = true;
+
+			const cInput = enteredChars[i]?.toLowerCase() ?? '#';
+			if (cInput != '#') {
+				if (item.char.toLowerCase() == cInput) {
+					item.state = 2;
+					totalCorrect++;
 				} else {
-					item.state = 0;
+					if (chancesChars.indexOf(cInput) > -1) {
+						item.state = 1;
+						chancesChars.splice(chancesChars.indexOf(cInput), 1);
+					} else {
+						item.state = 0;
+					}
 				}
+
+				item.char = cInput;
+			} else {
+				item.char = ' ';
+				item.state = 0;
 			}
 
 			return item;
@@ -105,21 +108,25 @@
 	}
 
 	function handleKeyboardKeyPress(e: CustomEvent) {
+		if (!started) return;
 		const { char } = e.detail;
 		appendChar(char);
 	}
 
 	function handleKeyboardDelete() {
+		if (!started) return;
 		backspaceChar();
 	}
 
-    function handleKeyboardSubmit() {
-        checkGame();
-    }
+	function handleKeyboardSubmit() {
+		if (!started) return;
+		checkGame();
+	}
 
-    function handleKeyboardClear() {
-        handleReset();
-    }
+	function handleKeyboardClear() {
+		if (!started) return;
+		handleReset();
+	}
 
 	export const gameController: GameController = {
 		start() {
@@ -129,6 +136,7 @@
 		end(win: boolean) {
 			if (win) {
 				alert("You're correct!");
+				started = false;
 			} else {
 				alert('Try again...');
 			}

@@ -11,10 +11,12 @@
 
     function handleReset() {
         dispatch("clearall");
+        this?.blur();
     }
 
     function handleDelete() {
         dispatch("deletechar");
+        this?.blur();
     }
 
     function addChar(char:string) {
@@ -64,7 +66,7 @@
     {#each KEYBOARD as rows, y (y)}
         <div class="row">
             {#each rows.split("") as char, x (x)}
-            <button class="key char" on:click={() => addChar(char)}>
+            <button class="key char" on:click={() => { addChar(char); this.blur(); }}>
                 {char == " " ? "SPACE" : char}
             </button>
         {/each}

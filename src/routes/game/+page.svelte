@@ -1,15 +1,21 @@
 <script lang="ts">
+	import { goto } from "$app/navigation";
 	import MainGame from "../../components/games/MainGame.svelte";
 	import type { GameController } from "../../components/games/types";
+	import { dogBreeds } from "../../stores/dogs";
 
-    let gameStates:("newgame"|"playing"|"gameover") = "newgame";
+    if (!$dogBreeds || Object.keys($dogBreeds).length == 0) {
+        goto("/", { invalidateAll: true, replaceState: true });
+    } 
+
+    let isGameStarted = false;
     let controller:GameController;
 
 </script>
 
 <div class="game-container">
     <div class="game">
-        <MainGame started={gameStates == "playing"} bind:gameController={controller}/>
+        <MainGame bind:started={isGameStarted} bind:gameController={controller}/>
     </div>
 </div>
 
