@@ -6,20 +6,20 @@
 
 	export let gameState: 'idle' | 'playing' | 'paused' | 'win' = 'idle';
 
-	const GAME_DIFFICULTIES:{[key:string]:{ label:string, showPercent: number }} = {
-		"easy": {
+	const GAME_DIFFICULTIES: { [key: string]: { label: string; showPercent: number } } = {
+		easy: {
 			label: 'Easy',
 			showPercent: 0.5
 		},
-		"medium": {
+		medium: {
 			label: 'Medium',
 			showPercent: 0.25
 		},
-		"hard": {
+		hard: {
 			label: 'Hard',
 			showPercent: 0.1
 		},
-		"extreme": {
+		extreme: {
 			label: 'Extreme (No Hint)',
 			showPercent: 0
 		}
@@ -30,15 +30,20 @@
 	let currentBreedName: string = '';
 	let currentBreedNameArray: any[] = [];
 	let enteredChars = '';
-	
+
+	let scoring: { tries: number; attemptsPattern: string[] } = {
+		tries: 0,
+		attemptsPattern: []
+	};
+
 	let visibleIndexes: number[] = [];
 
 	function prepareDifficulties() {
 		visibleIndexes = [];
 		const difficulties = GAME_DIFFICULTIES[selectedDifficulties];
 		const n = Math.floor(currentBreedName.length * difficulties.showPercent);
-		const rand = crypto.getRandomValues(new Uint8Array(n))
-		visibleIndexes = Array.from(rand.map(byte => Math.floor((byte / 255) * n)));
+		const rand = crypto.getRandomValues(new Uint8Array(n));
+		visibleIndexes = Array.from(rand.map((byte) => Math.floor((byte / 255) * n)));
 	}
 
 	function processBreedName() {
@@ -99,12 +104,12 @@
 	}
 
 	function checkGame() {
+		if (gameState != "playing") return;
+
 		let totalCorrect = 0;
-		console.log(
-			currentBreedName,
-			enteredChars,
-			currentBreedName.toLowerCase() == enteredChars.toLowerCase()
-		);
+		let attempPattern = '';
+
+		scoring.tries++;
 
 		let chancesChars = currentBreedName.toLowerCase().split('');
 		currentBreedNameArray = currentBreedNameArray.map((item, i) => {
@@ -115,23 +120,29 @@
 				if (item.char.toLowerCase() == cInput) {
 					item.state = 2;
 					totalCorrect++;
+					attempPattern += '🟩';
 				} else {
 					if (chancesChars.indexOf(cInput) > -1) {
 						item.state = 1;
 						chancesChars.splice(chancesChars.indexOf(cInput), 1);
+						attempPattern += '🟧';
 					} else {
 						item.state = 0;
+						attempPattern += '🟥';
 					}
 				}
 
 				item.char = cInput;
 			} else {
-				item.char = ' ';
+				item.char = '#';
 				item.state = 0;
+				attempPattern += '⬜️';
 			}
 
 			return item;
 		});
+
+		scoring.attemptsPattern.push(attempPattern);
 
 		if (totalCorrect >= currentBreedName.length) {
 			gameController.end(true);
@@ -161,18 +172,20 @@
 
 	export const gameController: GameController = {
 		start() {
-			enteredChars = "";
+			enteredChars = '';
 			breedImages = [];
-			currentBreedName = "";
+			currentBreedName = '';
 			currentBreedNameArray = [];
 			visibleIndexes = [];
-			
+			scoring.tries = 0;
+			scoring.attemptsPattern = [];
+
 			loadBreedInfo();
 		},
 		pause() {},
 		end(win: boolean) {
 			if (win) {
-				alert("You're correct!");
+				gameState = 'win';
 			} else {
 				alert('Try again...');
 			}
@@ -181,7 +194,7 @@
 </script>
 
 <div class="guess-the-doggo-container">
-	{#if gameState == 'playing'}
+	{#if gameState == 'playing' || gameState == "win"}
 		<div class="dog-pics">
 			{#each breedImages as img, i (i)}
 				<img src={img} alt="Dog image number {i + 1}" class="dog-pic" />
@@ -196,7 +209,7 @@
 					class:red={item.state == 0}
 					class:space={item.char == ' '}
 				>
-					{(item.visible || visibleIndexes.includes(i)) ? item.char : ''}
+					{item.visible || visibleIndexes.includes(i) ? (item.char == '#' ? '' : item.char) : ''}
 				</div>
 			{/each}
 		</div>
@@ -237,12 +250,78 @@
 			</button>
 		</div>
 	{/if}
+	<!-- Separate if..else for floating UI -->
+	{#if gameState == "win"}
+		<div class="win-screen">
+			<h1 class="text-7xl uppercase text-center text-yellow-500">You Win!</h1>
+			<h3 class="text-5xl mt-6 text-center font-semibold">It's <span style="text-transform: capitalize;">{currentBreedName}</span>!</h3>
+			<p class="text-3xl mt-6 text-center">Total attempts: {scoring.tries}</p>
+			<textarea value={`The breed is: ${currentBreedName.split(" ").map(x => x[0].toUpperCase() + x.slice(1)).join(" ")}\n\nMy attempts:\n${scoring.attemptsPattern.join("\n")}`.trim()}/>
+			<div class="buttons mt-8 flex justify-evenly">
+				<button class="win-btn green">
+					Again
+				</button>
+				<button class="win-btn">
+					Exit
+				</button>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style lang="scss">
 	.guess-the-doggo-container {
 		min-height: 300px;
 		padding: 1rem;
+		position: relative;
+
+		.win-screen {
+			position: absolute;
+			width: 75%;
+			background-color: lightseagreen;
+			color: white;
+			border: 3px solid green;
+			border-radius: 1rem;
+
+			display: flex;
+			flex-direction: column;
+
+			padding: 1.5rem;
+			top: 50vh;
+			left: 50%;
+			transform: translate(-50%, -50%);
+
+			textarea {
+				align-self: center;
+				width: 75%;
+				height: 100px;
+				margin-top: 1.75rem;
+				color: #333;
+				resize: none;
+				padding: 1rem;
+				border: 1px solid #ccc;
+				border-radius: 0.5rem;
+				overflow: auto;
+			}
+
+			.buttons {
+				.win-btn {
+					font-size: 1.5rem;
+					padding: 0.75rem 3rem;
+					background-color: orange;
+					color: white;
+					border-radius: 5rem;
+					text-transform: uppercase;
+					letter-spacing: 3px;
+					text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.4);
+					box-shadow: 1px 1px 3px rgba(255,255,255,0.5);
+
+					&.green {
+						background-color: green;
+					}
+				}
+			}
+		}
 
 		.entered-chars {
 			text-transform: uppercase;
