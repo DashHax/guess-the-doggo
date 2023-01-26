@@ -3,8 +3,9 @@
 	import api from '../../lib/api';
 	import type { GameController } from './types';
 	import GameKeyboard from './GameKeyboard.svelte';
+	import { goto } from '$app/navigation';
 
-	export let gameState: 'idle' | 'playing' | 'paused' | 'win' = 'idle';
+	export let gameState: 'idle' | 'playing' | 'paused' | 'win' | 'ended' = 'idle';
 
 	const GAME_DIFFICULTIES: { [key: string]: { label: string; showPercent: number } } = {
 		easy: {
@@ -25,6 +26,8 @@
 		}
 	};
 
+	const MAX_HINT = 10;
+
 	let selectedDifficulties: string;
 	let breedImages: string[] = [];
 	let currentBreedName: string = '';
@@ -41,17 +44,22 @@
 	function prepareDifficulties() {
 		visibleIndexes = [];
 		const difficulties = GAME_DIFFICULTIES[selectedDifficulties];
-		const n = Math.floor(currentBreedName.length * difficulties.showPercent);
-		const rand = crypto.getRandomValues(new Uint8Array(n));
-		visibleIndexes = Array.from(rand.map((byte) => Math.floor((byte / 255) * n)));
+		const n = Math.min(Math.floor(currentBreedName.length * difficulties.showPercent), MAX_HINT);
+
+		while (visibleIndexes.length < n) {
+			let rand = Math.floor(Math.random() * currentBreedName.length);
+			while (visibleIndexes.indexOf(rand) > -1) {
+				rand = Math.floor(Math.random() * currentBreedName.length);
+			}
+
+			visibleIndexes.push(rand);
+		}
 	}
 
-	function processBreedName() {
-		currentBreedNameArray = currentBreedName.split('').map((c) => ({
-			char: c,
-			visible: false,
-			state: -1
-		}));
+	function processBreedName(backspace: boolean = false) {
+		currentBreedNameArray = currentBreedName
+			.split('')
+			.map((c) => ({ char: c, visible: false, state: -1 }));
 	}
 
 	function loadBreedInfo() {
@@ -70,7 +78,7 @@
 			subBreedName == ''
 				? `breed/${breedName}/images/random/3`
 				: `breed/${breedName}/${subBreedName}/images/random/3`;
-		console.log(url);
+
 		api.dogApi
 			.get(url)
 			.then((response) => {
@@ -79,6 +87,9 @@
 				currentBreedName = breedName + (subBreedName ? ' ' + subBreedName : '');
 				processBreedName();
 				prepareDifficulties();
+				window['$$__gameEngine'] = {
+					breedName: currentBreedName
+				};
 				gameState = 'playing';
 			})
 			.catch((error) => {
@@ -100,44 +111,64 @@
 
 	function handleReset() {
 		enteredChars = '';
-		processBreedName();
 	}
 
 	function checkGame() {
-		if (gameState != "playing") return;
+		if (gameState != 'playing') return;
 
 		let totalCorrect = 0;
 		let attempPattern = '';
 
 		scoring.tries++;
-
 		let chancesChars = currentBreedName.toLowerCase().split('');
+
 		currentBreedNameArray = currentBreedNameArray.map((item, i) => {
+			const cInput = enteredChars[i]?.toLowerCase() ?? '#';
+			const cWord = currentBreedName[i].toLowerCase();
+
+			item.char = cInput;
 			item.visible = true;
 
-			const cInput = enteredChars[i]?.toLowerCase() ?? '#';
-			if (cInput != '#') {
-				if (item.char.toLowerCase() == cInput) {
-					item.state = 2;
-					totalCorrect++;
-					attempPattern += '🟩';
-				} else {
-					if (chancesChars.indexOf(cInput) > -1) {
-						item.state = 1;
-						chancesChars.splice(chancesChars.indexOf(cInput), 1);
-						attempPattern += '🟧';
-					} else {
-						item.state = 0;
-						attempPattern += '🟥';
-					}
-				}
+			// 1. Current letter is correct in both position and character
+			if (cInput == cWord) {
+				chancesChars[i] = '.';
+				item.state = 2;
+				totalCorrect++;
+				attempPattern += '🟩';
 
-				item.char = cInput;
-			} else {
-				item.char = '#';
-				item.state = 0;
-				attempPattern += '⬜️';
+				return item;
 			}
+
+			/**
+			 * 2.
+			 *
+			 * Current letter is correct but not in the right position.
+			 * At this stage, cInput != cWord will always be true.
+			 * */
+
+			for (let x = 0; x < chancesChars.length; x++) {
+				// Go through the chances characters array <- this is a buffer to check and replace found char
+				if (chancesChars[x] == cInput) {
+					// Found the first match at the chances characters array
+					chancesChars[x] = '.'; // Replace the chance character - means this chance had been used
+					item.state = 1;
+					attempPattern += '🟧';
+
+					return item; // Immediately return
+				}
+			}
+
+			/**
+			 * 3.
+			 *
+			 * Current letter is not correct both in terms of character and position.
+			 * At this stage, it is always cInput != cWord, and cInput is nowhere to be found in chancesChars
+			 * Therefore, since it's not matching, and cInput is not found in the answer space, hence it's assumed to
+			 * be not found
+			 * */
+
+			item.state = 0;
+			attempPattern += '⬜️';
 
 			return item;
 		});
@@ -168,6 +199,15 @@
 	function handleKeyboardClear() {
 		if (gameState != 'playing') return;
 		handleReset();
+		processBreedName();
+	}
+
+	function handleRestart() {
+		gameController.start();
+	}
+
+	function handleGameEnd() {
+		gameController.end(false);
 	}
 
 	export const gameController: GameController = {
@@ -187,14 +227,15 @@
 			if (win) {
 				gameState = 'win';
 			} else {
-				alert('Try again...');
+				gameState = 'ended';
+				goto('/', { replaceState: true, invalidateAll: true });
 			}
 		}
 	};
 </script>
 
 <div class="guess-the-doggo-container">
-	{#if gameState == 'playing' || gameState == "win"}
+	{#if gameState == 'playing' || gameState == 'win'}
 		<div class="dog-pics">
 			{#each breedImages as img, i (i)}
 				<img src={img} alt="Dog image number {i + 1}" class="dog-pic" />
@@ -206,7 +247,7 @@
 					class="letter"
 					class:green={item.state == 2}
 					class:orange={item.state == 1}
-					class:red={item.state == 0}
+					class:gray={item.state == 0}
 					class:space={item.char == ' '}
 				>
 					{item.visible || visibleIndexes.includes(i) ? (item.char == '#' ? '' : item.char) : ''}
@@ -251,19 +292,22 @@
 		</div>
 	{/if}
 	<!-- Separate if..else for floating UI -->
-	{#if gameState == "win"}
+	{#if gameState == 'win'}
 		<div class="win-screen">
 			<h1 class="text-7xl uppercase text-center text-yellow-500">You Win!</h1>
-			<h3 class="text-5xl mt-6 text-center font-semibold">It's <span style="text-transform: capitalize;">{currentBreedName}</span>!</h3>
+			<h3 class="text-5xl mt-6 text-center font-semibold">
+				It's <span style="text-transform: capitalize;">{currentBreedName}</span>!
+			</h3>
 			<p class="text-3xl mt-6 text-center">Total attempts: {scoring.tries}</p>
-			<textarea value={`The breed is: ${currentBreedName.split(" ").map(x => x[0].toUpperCase() + x.slice(1)).join(" ")}\n\nMy attempts:\n${scoring.attemptsPattern.join("\n")}`.trim()}/>
+			<textarea
+				value={`The breed is: ${currentBreedName
+					.split(' ')
+					.map((x) => (x ? x[0].toUpperCase() + x.slice(1) : ''))
+					.join(' ')}\n\nMy attempts:\n${scoring.attemptsPattern.join('\n')}`.trim()}
+			/>
 			<div class="buttons mt-8 flex justify-evenly">
-				<button class="win-btn green">
-					Again
-				</button>
-				<button class="win-btn">
-					Exit
-				</button>
+				<button class="win-btn green" on:click={handleRestart}> Again </button>
+				<button class="win-btn" on:click={handleGameEnd}> Exit </button>
 			</div>
 		</div>
 	{/if}
@@ -314,7 +358,7 @@
 					text-transform: uppercase;
 					letter-spacing: 3px;
 					text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.4);
-					box-shadow: 1px 1px 3px rgba(255,255,255,0.5);
+					box-shadow: 1px 1px 3px rgba(255, 255, 255, 0.5);
 
 					&.green {
 						background-color: green;
@@ -356,10 +400,10 @@
 
 				transition: all 250ms ease;
 
-				&.red {
-					color: white;
-					background-color: rgb(255, 0, 0);
-					border-color: rgb(170, 0, 0);
+				&.gray {
+					color: #333;
+					background-color: #eee;
+					border-color: #aaa;
 				}
 
 				&.orange {

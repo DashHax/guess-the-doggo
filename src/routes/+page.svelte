@@ -8,7 +8,6 @@
 
     onMount(() => {
         dogBreeds.set(data.breeds);
-        console.log($dogBreeds);
         goto("/game");
     })
 </script>
